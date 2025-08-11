@@ -1,0 +1,45 @@
+[package]
+name = "nanoai"
+version = "0.1.0"
+authors = ["ishanwen <ishanwen@github.com>"]
+edition = "2024"
+description = "A simple nano AI client Power by Rust"
+license = "MIT"
+# repository = "https://github.com/ishanwen/nanoai"
+keywords = ["ai", "nano", "rust"]
+categories = ["ai"]
+
+[dependencies]
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "stream"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+thiserror = "2.0.12"
+tokio = { version = "1.0", features = ["full"] }
+futures = "0.3"
+bytes = "1.0"
+tokio-util = { version = "0.7", features = ["codec"] }
+dotenv = "0.15.0"
+log = "0.4.27"
+once_cell = "1.19"
+fastrand = "2.0"
+[dev-dependencies]
+tokio = { version = "1.47.1", features = ["macros", "rt-multi-thread"] }
+env_logger = "0.10"
+
+# Clippy 配置
+[lints.clippy]
+uninlined_format_args = "allow"        # 允许未内联的格式化参数
+useless_vec = "allow"                  # 允许不必要的 vec! 宏
+single_component_path_imports = "allow" # 允许单组件路径导入
+
+[profile.release]
+opt-level = "s"       # 优化代码尺寸，兼顾速度
+lto = "fat"           # 启用最大程度的链接时优化
+codegen-units = 1     # 降低代码生成单元数，增加优化时间但提升性能
+panic = "abort"       # 使用 'abort' 而不是 'unwind' 来处理 panic
+strip = "none"     # 移除符号信息，保留必要的调试信息
+
+# 旧示例已删除，使用新的函数式编程示例
+# [[example]]
+# name = "chas"
+# path = "example/chas.rs"
