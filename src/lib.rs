@@ -3,6 +3,7 @@
 
 use futures::{Stream, StreamExt};
 use log::{debug, error, info, warn};
+use nanorand::{Rng, WyRand};
 use reqwest::{
     Client as ReqwestClient,
     header::{HeaderMap, HeaderName, HeaderValue},
@@ -101,8 +102,9 @@ impl Config {
     }
 
     pub fn with_random_seed_auto(self) -> Self {
+        let mut rng = WyRand::new();
         Self {
-            random_seed: Some(fastrand::u64(..)),
+            random_seed: Some(rng.generate::<u64>()),
             ..self
         }
     }
@@ -149,10 +151,11 @@ pub struct LLMClient {
 impl LLMClient {
     // 纯函数：创建新客户端
     pub fn new(config: Config) -> Self {
-        static INITIALIZED: once_cell::sync::Lazy<std::sync::Mutex<Vec<String>>> =
-            once_cell::sync::Lazy::new(|| std::sync::Mutex::new(Vec::new()));
+        static INITIALIZED: std::sync::OnceLock<std::sync::Mutex<Vec<String>>> =
+            std::sync::OnceLock::new();
 
-        if let Ok(mut models) = INITIALIZED.lock()
+        let models_mutex = INITIALIZED.get_or_init(|| std::sync::Mutex::new(Vec::new()));
+        if let Ok(mut models) = models_mutex.lock()
             && !models.contains(&config.model)
         {
             info!("Initialized LLM with model: {}", config.model);
@@ -435,7 +438,7 @@ fn build_params(config: &Config, messages: &[Message], stream: bool) -> Result<V
         params["max_tokens"] = config.max_tokens.into();
     }
 
-    // 添加随机种子（使用fastrand）
+    // 添加随机种子（使用nanorand）
     if let Some(seed) = config.random_seed {
         params["seed"] = seed.into();
     }
@@ -555,9 +558,7 @@ mod tests {
     fn test_build_params_with_seed() {
         let config = Config::default().with_random_seed(42);
         let messages = vec![message("user", "test")];
-
         let params = build_params(&config, &messages, false).unwrap();
-        
         assert_eq!(params["seed"], 42);
     }
 
