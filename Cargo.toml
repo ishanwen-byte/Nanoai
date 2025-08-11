@@ -5,7 +5,7 @@ authors = ["ishanwen <ishanwen@github.com>"]
 edition = "2024"
 description = "A simple nano AI client Power by Rust"
 license = "MIT"
-# repository = "https://github.com/ishanwen/nanoai"
+repository = "https://github.com/ishanwen/Nanoai"
 keywords = ["ai", "nano", "rust"]
 categories = ["ai"]
 
