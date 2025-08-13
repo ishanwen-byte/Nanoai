@@ -235,8 +235,6 @@ impl LLMClient {
 
         Self {
             client: ReqwestClient::builder()
-                .danger_accept_invalid_certs(false)
-                .use_rustls_tls()
                 .timeout(config.timeout)
                 .connect_timeout(Duration::from_secs(10))
                 .build()
