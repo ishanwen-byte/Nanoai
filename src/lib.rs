@@ -96,7 +96,7 @@ impl Default for Config {
             timeout: Duration::from_secs(60),
             retries: 3,
             retry_delay: Duration::from_millis(1000),
-            api_base: "https://api.openrouter.com/v1".into(),
+            api_base: "https://openrouter.ai/api/v1".into(),
             api_key: "".into(),
             random_seed: None,
         }
