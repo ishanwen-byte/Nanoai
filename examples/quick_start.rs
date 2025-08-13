@@ -8,14 +8,14 @@ async fn main() -> Result<()> {
     println!("🚀 NanoAI 快速入门\n");
 
     // 步骤1: 从.env文件获取API密钥和配置
-    dotenv::dotenv().ok();
+    dotenvy::dotenv().ok();
 
-    let (api_key, model) = if let Ok(key) = dotenv::var("OPENROUTER_API_KEY") {
-        let model = dotenv::var("OPENROUTER_MODEL")
+    let (api_key, model) = if let Ok(key) = dotenvy::var("OPENROUTER_API_KEY") {
+        let model = dotenvy::var("OPENROUTER_MODEL")
             .unwrap_or("tngtech/deepseek-r1t2-chimera:free".to_string());
         println!("🌐 使用 OpenRouter 配置");
         (key, model)
-    } else if let Ok(key) = dotenv::var("API_KEY") {
+    } else if let Ok(key) = dotenvy::var("API_KEY") {
         println!("🌐 使用 OpenRouter 配置 (通用API密钥)");
         (key, "tngtech/deepseek-r1t2-chimera:free".to_string())
     } else {

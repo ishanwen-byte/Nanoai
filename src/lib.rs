@@ -103,6 +103,24 @@ impl Default for Config {
     }
 }
 
+// 宏：生成Config的builder方法
+macro_rules! config_builder {
+    ($field:ident, $type:ty) => {
+        paste::paste! {
+            pub fn [<with_ $field>](self, $field: $type) -> Self {
+                Self { $field, ..self }
+            }
+        }
+    };
+    ($field:ident, $type:ty, $transform:expr) => {
+        paste::paste! {
+            pub fn [<with_ $field>](self, $field: $type) -> Self {
+                Self { $field: $transform($field), ..self }
+            }
+        }
+    };
+}
+
 impl Config {
     pub fn from_env() -> Result<Self> {
         if std::path::Path::new(".env").exists()
@@ -134,27 +152,11 @@ impl Config {
         Ok(Self::default().with_api_key(api_key).with_model(model))
     }
 
-    pub fn with_model(self, model: String) -> Self {
-        Self { model, ..self }
-    }
-
-    pub fn with_api_key(self, api_key: String) -> Self {
-        Self { api_key, ..self }
-    }
-
-    pub fn with_temperature(self, temperature: f32) -> Self {
-        Self {
-            temperature,
-            ..self
-        }
-    }
-
-    pub fn with_random_seed(self, seed: u64) -> Self {
-        Self {
-            random_seed: Some(seed),
-            ..self
-        }
-    }
+    // 使用宏生成builder方法
+    config_builder!(model, String);
+    config_builder!(api_key, String);
+    config_builder!(temperature, f32);
+    config_builder!(random_seed, u64, Some);
 
     pub fn with_random_seed_auto(self) -> Self {
         let mut rng = WyRand::new();
@@ -472,38 +474,43 @@ async fn check_response_status(response: reqwest::Response) -> Result<reqwest::R
     Ok(response)
 }
 
+// 宏：提取响应内容的通用逻辑
+macro_rules! extract_content {
+    ($completion:expr) => {
+        $completion
+            .choices
+            .into_iter()
+            .next()
+            .map(|c| c.message.content)
+            .ok_or(NanoError::NoContent)
+    };
+}
+
+// 宏：构建RequestStats的通用逻辑
+macro_rules! build_stats {
+    ($completion:expr) => {
+        RequestStats {
+            duration_ms: 0, // 由调用方根据实际请求耗时设置
+            prompt_tokens: $completion.usage.as_ref().map(|u| u.prompt_tokens),
+            completion_tokens: $completion.usage.as_ref().map(|u| u.completion_tokens),
+            total_tokens: $completion.usage.as_ref().map(|u| u.total_tokens),
+            model: String::new(), // 由调用方设置实际使用的模型名称
+            timestamp: Some(std::time::SystemTime::now()),
+        }
+    };
+}
+
 async fn handle_response(response: reqwest::Response) -> Result<String> {
     let response = check_response_status(response).await?;
-
     let completion: CompletionResponse = response.json().await?;
-    completion
-        .choices
-        .into_iter()
-        .next()
-        .map(|c| c.message.content)
-        .ok_or(NanoError::NoContent)
+    extract_content!(completion)
 }
 
 async fn handle_response_with_stats(response: reqwest::Response) -> Result<ResponseWithStats> {
     let response = check_response_status(response).await?;
-
     let completion: CompletionResponse = response.json().await?;
-    let content = completion
-        .choices
-        .into_iter()
-        .next()
-        .map(|c| c.message.content)
-        .ok_or(NanoError::NoContent)?;
-
-    let stats = RequestStats {
-        duration_ms: 0, // 由调用方根据实际请求耗时设置
-        prompt_tokens: completion.usage.as_ref().map(|u| u.prompt_tokens),
-        completion_tokens: completion.usage.as_ref().map(|u| u.completion_tokens),
-        total_tokens: completion.usage.as_ref().map(|u| u.total_tokens),
-        model: String::new(), // 由调用方设置实际使用的模型名称
-        timestamp: Some(std::time::SystemTime::now()),
-    };
-
+    let content = extract_content!(completion)?;
+    let stats = build_stats!(completion);
     Ok(ResponseWithStats { content, stats })
 }
 
@@ -543,13 +550,31 @@ pub fn message(role: &str, content: &str) -> Message {
 mod tests {
     use super::*;
 
+    // 宏：简化配置字段断言
+    macro_rules! assert_config_field {
+        ($config:expr, $field:ident, $expected:expr) => {
+            assert_eq!($config.$field, $expected);
+        };
+    }
+
+    // 宏：简化参数断言
+    macro_rules! assert_param {
+        ($params:expr, $key:expr, $expected:expr) => {
+            assert_eq!($params[$key], $expected);
+        };
+        ($params:expr, $key:expr, float, $expected:expr) => {
+            let value = $params[$key].as_f64().unwrap();
+            assert!((value - $expected).abs() < 0.001);
+        };
+    }
+
     #[test]
     fn test_config_default() {
         let config = Config::default();
-        assert_eq!(config.model, "tngtech/deepseek-r1t2-chimera:free");
-        assert_eq!(config.temperature, 0.7);
-        assert_eq!(config.max_tokens, 4096);
-        assert_eq!(config.random_seed, None);
+        assert_config_field!(config, model, "tngtech/deepseek-r1t2-chimera:free");
+        assert_config_field!(config, temperature, 0.7);
+        assert_config_field!(config, max_tokens, 4096);
+        assert_config_field!(config, random_seed, None);
     }
 
     #[test]
@@ -559,10 +584,10 @@ mod tests {
             .with_api_key("test-key".to_string())
             .with_temperature(0.5)
             .with_random_seed(12345);
-        assert_eq!(config.model, "gpt-4");
-        assert_eq!(config.api_key, "test-key");
-        assert_eq!(config.temperature, 0.5);
-        assert_eq!(config.random_seed, Some(12345));
+        assert_config_field!(config, model, "gpt-4");
+        assert_config_field!(config, api_key, "test-key");
+        assert_config_field!(config, temperature, 0.5);
+        assert_config_field!(config, random_seed, Some(12345));
     }
 
     #[test]
@@ -597,11 +622,10 @@ mod tests {
         let config = Config::default();
         let messages = vec![message("user", "test")];
         let params = build_params(&config, messages);
-        assert_eq!(params["model"], "tngtech/deepseek-r1t2-chimera:free");
-        assert_eq!(params["stream"], false);
-        assert_eq!(params["max_tokens"], 4096);
-        let temp = params["temperature"].as_f64().unwrap();
-        assert!((temp - 0.7).abs() < 0.001);
+        assert_param!(params, "model", "tngtech/deepseek-r1t2-chimera:free");
+        assert_param!(params, "stream", false);
+        assert_param!(params, "max_tokens", 4096);
+        assert_param!(params, "temperature", float, 0.7);
         assert!(params.get("seed").is_none());
     }
 
@@ -610,7 +634,7 @@ mod tests {
         let config = Config::default().with_random_seed(42);
         let messages = vec![message("user", "test")];
         let params = build_params(&config, messages);
-        assert_eq!(params["seed"], 42);
+        assert_param!(params, "seed", 42);
     }
 
     #[test]
@@ -618,10 +642,10 @@ mod tests {
         let config = Config::default().with_model("openai/gpt-4".to_string());
         let messages = vec![message("user", "test")];
         let params = build_params(&config, messages);
-        assert_eq!(params["model"], "openai/gpt-4");
-        assert_eq!(params["max_tokens"], 4096);
-        assert!((params["temperature"].as_f64().unwrap() - 0.7).abs() < 0.001);
-        assert_eq!(params["top_p"], 1.0);
+        assert_param!(params, "model", "openai/gpt-4");
+        assert_param!(params, "max_tokens", 4096);
+        assert_param!(params, "temperature", float, 0.7);
+        assert_param!(params, "top_p", 1.0);
     }
 
     #[test]
@@ -637,7 +661,7 @@ mod tests {
     async fn test_llm_client_creation() {
         let config = Config::default().with_api_key("test-key".to_string());
         let client = LLMClient::new(config.clone());
-        assert_eq!(client.config.api_key, "test-key");
-        assert_eq!(client.config.model, "tngtech/deepseek-r1t2-chimera:free");
+        assert_config_field!(client.config, api_key, "test-key");
+        assert_config_field!(client.config, model, "tngtech/deepseek-r1t2-chimera:free");
     }
 }
