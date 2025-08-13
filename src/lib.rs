@@ -15,34 +15,24 @@ use tokio::time::sleep;
 pub enum NanoError {
     #[error("HTTP请求失败: {0}")]
     Http(#[from] reqwest::Error),
-
     #[error("JSON处理错误: {0}")]
     Json(#[from] serde_json::Error),
-
     #[error("API错误: {0}")]
     Api(String),
-
     #[error("请求超时")]
     Timeout,
-
     #[error("响应内容为空")]
     NoContent,
-
     #[error("流处理错误: {0}")]
     StreamError(String),
-
     #[error("请求频率超限: {0}")]
     RateLimit(String),
-
     #[error("身份验证失败: {0}")]
     Auth(String),
-
     #[error("模型不存在: {0}")]
     ModelNotFound(String),
-
     #[error("请求参数无效: {0}")]
     InvalidRequest(String),
-
     #[error("配置错误: {0}")]
     Config(String),
 }

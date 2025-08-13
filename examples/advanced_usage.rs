@@ -310,3 +310,22 @@ async fn model_comparison_example(api_key: &str) -> Result<()> {
     println!("\n✅ 模型比较示例完成\n");
     Ok(())
 }
+
+/// 辅助函数：创建测试配置
+#[allow(dead_code)]
+fn create_test_config(api_key: &str, model: &str) -> Config {
+    Config::default()
+        .with_api_key(api_key.to_string())
+        .with_model(model.to_string())
+        .with_temperature(0.7)
+}
+
+/// 辅助函数：格式化响应时间
+#[allow(dead_code)]
+fn format_duration(duration: Duration) -> String {
+    if duration.as_secs() > 0 {
+        format!("{:.2}s", duration.as_secs_f64())
+    } else {
+        format!("{}ms", duration.as_millis())
+    }
+}
