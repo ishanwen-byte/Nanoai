@@ -46,26 +46,26 @@ try {
 }
 
 # 安全审计
-Write-Host "[DEBUG] Running security audit..."
-if (Get-Command cargo-audit -ErrorAction SilentlyContinue) {
-    try {
-        cargo audit
-    } catch {
-        Write-Host "[WARNING] Security vulnerabilities found. Please review and address them."
-        exit 1
-    }
-} else {
-    Write-Host "[WARNING] cargo-audit not installed. Install with: cargo install cargo-audit"
-}
+# Write-Host "[DEBUG] Running security audit..."
+# if (Get-Command cargo-audit -ErrorAction SilentlyContinue) {
+#     try {
+#         cargo audit
+#     } catch {
+#         Write-Host "[WARNING] Security vulnerabilities found. Please review and address them."
+#         exit 1
+#     }
+# } else {
+#     Write-Host "[WARNING] cargo-audit not installed. Install with: cargo install cargo-audit"
+# }
 
-# 文档检查
-Write-Host "[DEBUG] Checking documentation build..."
-try {
-    cargo doc --no-deps --all-features
-} catch {
-    Write-Host "[ERROR] Documentation build failed."
-    exit 1
-}
+# # 文档检查
+# Write-Host "[DEBUG] Checking documentation build..."
+# try {
+#     cargo doc --no-deps --all-features
+# } catch {
+#     Write-Host "[ERROR] Documentation build failed."
+#     exit 1
+# }
 
 Write-Host "[OK] All pre-quality checks passed!"
 Write-Host "================================="

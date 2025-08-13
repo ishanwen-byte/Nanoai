@@ -2,7 +2,7 @@
 //! 展示如何使用 nanoai 库进行各种 AI 对话操作
 
 use futures::StreamExt;
-use nanoai::{Config, LLMClient, Message, Result, message};
+use nanoai::{Config, LLMClient, Result, message};
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -10,23 +10,21 @@ async fn main() -> Result<()> {
     env_logger::init();
 
     // 从.env文件获取API密钥和配置
-    let (api_key, base_url, model) = if let Ok(key) = dotenv::var("OPENROUTER_API_KEY") {
-        let model = dotenv::var("OPENROUTER_MODEL").unwrap_or("openai/gpt-3.5-turbo".to_string());
-        (key, Some("https://openrouter.ai/api/v1".to_string()), model)
-    } else if let Ok(key) = dotenv::var("OPENAI_API_KEY") {
-        (key, None, "gpt-3.5-turbo".to_string())
-    } else if let Ok(key) = dotenv::var("API_KEY") {
-        (key, None, "gpt-3.5-turbo".to_string())
+    let (api_key, model) = if let Ok(key) = dotenvy::var("OPENROUTER_API_KEY") {
+        let model = dotenvy::var("OPENROUTER_MODEL")
+            .unwrap_or("tngtech/deepseek-r1t2-chimera:free".to_string());
+        (key, model)
+    } else if let Ok(key) = dotenvy::var("API_KEY") {
+        (key, "tngtech/deepseek-r1t2-chimera:free".to_string())
     } else {
-        println!("❌ 错误: 未找到API密钥");
+        println!("❌ 错误: 未找到OpenRouter API密钥");
         println!("\n请通过以下方式之一设置API密钥:");
         println!("\n方式1: 创建.env文件 (推荐)");
-        println!("   OpenAI: OPENAI_API_KEY=your-openai-key");
-        println!("   OpenRouter: OPENROUTER_API_KEY=your-openrouter-key");
-        println!("              OPENROUTER_MODEL=your-model-name");
+        println!("   OPENROUTER_API_KEY=your-openrouter-key");
+        println!("   OPENROUTER_MODEL=your-model-name (可选)");
         println!("\n方式2: 设置环境变量");
-        println!("   Windows PowerShell: $env:OPENAI_API_KEY=\"your-api-key\"");
-        println!("   Windows CMD: set OPENAI_API_KEY=your-api-key");
+        println!("   Windows PowerShell: $env:OPENROUTER_API_KEY=\"your-api-key\"");
+        println!("   Windows CMD: set OPENROUTER_API_KEY=your-api-key");
         return Ok(());
     };
 
@@ -36,36 +34,32 @@ async fn main() -> Result<()> {
     println!("🚀 NanoAI 基础使用示例\n");
 
     // 示例1: 基础配置和简单对话
-    basic_chat_example(&api_key, &base_url, &model).await?;
+    basic_chat_example(&api_key, &model).await?;
 
     // 示例2: 自定义配置
-    custom_config_example(&api_key, &base_url, &model).await?;
+    custom_config_example(&api_key, &model).await?;
 
     // 示例3: 多轮对话
-    multi_turn_conversation(&api_key, &base_url, &model).await?;
+    multi_turn_conversation(&api_key, &model).await?;
 
     // 示例4: 流式响应
-    streaming_example(&api_key, &base_url, &model).await?;
+    streaming_example(&api_key, &model).await?;
 
     // 示例5: 错误处理
-    error_handling_example(&api_key, &base_url, &model).await?;
+    error_handling_example(&api_key, &model).await?;
 
     println!("\n✅ 所有示例执行完成！");
     Ok(())
 }
 
 /// 示例1: 基础配置和简单对话
-async fn basic_chat_example(api_key: &str, base_url: &Option<String>, model: &str) -> Result<()> {
+async fn basic_chat_example(api_key: &str, model: &str) -> Result<()> {
     println!("📝 示例1: 基础对话");
 
     // 创建默认配置
-    let mut config = Config::default()
+    let config = Config::default()
         .with_api_key(api_key.to_string())
         .with_model(model.to_string());
-
-    if let Some(url) = base_url {
-        config = config.with_base_url(url.clone());
-    }
 
     // 创建客户端
     let client = LLMClient::new(config);
@@ -79,22 +73,14 @@ async fn basic_chat_example(api_key: &str, base_url: &Option<String>, model: &st
 }
 
 /// 示例2: 自定义配置
-async fn custom_config_example(
-    api_key: &str,
-    base_url: &Option<String>,
-    model: &str,
-) -> Result<()> {
+async fn custom_config_example(api_key: &str, model: &str) -> Result<()> {
     println!("⚙️ 示例2: 自定义配置");
 
     // 创建自定义配置
-    let mut config = Config::default()
+    let config = Config::default()
         .with_api_key(api_key.to_string())
         .with_model(model.to_string())
         .with_temperature(0.9); // 更高的创造性
-
-    if let Some(url) = base_url {
-        config = config.with_base_url(url.clone());
-    }
 
     let client = LLMClient::new(config);
 
@@ -108,20 +94,12 @@ async fn custom_config_example(
 }
 
 /// 示例3: 多轮对话
-async fn multi_turn_conversation(
-    api_key: &str,
-    base_url: &Option<String>,
-    model: &str,
-) -> Result<()> {
+async fn multi_turn_conversation(api_key: &str, model: &str) -> Result<()> {
     println!("💬 示例3: 多轮对话");
 
-    let mut config = Config::default()
+    let config = Config::default()
         .with_api_key(api_key.to_string())
         .with_model(model.to_string());
-
-    if let Some(url) = base_url {
-        config = config.with_base_url(url.clone());
-    }
 
     let client = LLMClient::new(config);
 
@@ -146,16 +124,12 @@ async fn multi_turn_conversation(
 }
 
 /// 示例4: 流式响应
-async fn streaming_example(api_key: &str, base_url: &Option<String>, model: &str) -> Result<()> {
+async fn streaming_example(api_key: &str, model: &str) -> Result<()> {
     println!("🌊 示例4: 流式响应");
 
-    let mut config = Config::default()
+    let config = Config::default()
         .with_api_key(api_key.to_string())
         .with_model(model.to_string());
-
-    if let Some(url) = base_url {
-        config = config.with_base_url(url.clone());
-    }
 
     let client = LLMClient::new(config);
 
@@ -187,21 +161,13 @@ async fn streaming_example(api_key: &str, base_url: &Option<String>, model: &str
 }
 
 /// 示例5: 错误处理
-async fn error_handling_example(
-    api_key: &str,
-    base_url: &Option<String>,
-    model: &str,
-) -> Result<()> {
+async fn error_handling_example(api_key: &str, model: &str) -> Result<()> {
     println!("🛡️ 示例5: 错误处理");
 
     // 故意使用错误的配置来演示错误处理
-    let mut config = Config::default()
+    let config = Config::default()
         .with_api_key("invalid_key".to_string()) // 无效的API密钥
         .with_model(model.to_string());
-
-    if let Some(url) = base_url {
-        config = config.with_base_url(url.clone());
-    }
 
     let client = LLMClient::new(config);
 
@@ -233,13 +199,9 @@ async fn error_handling_example(
 
     // 现在使用正确的配置
     println!("\n🔧 使用正确的配置重试...");
-    let mut correct_config = Config::default()
+    let correct_config = Config::default()
         .with_api_key(api_key.to_string())
         .with_model(model.to_string());
-
-    if let Some(url) = base_url {
-        correct_config = correct_config.with_base_url(url.clone());
-    }
 
     let correct_client = LLMClient::new(correct_config);
     let response = correct_client
@@ -249,27 +211,4 @@ async fn error_handling_example(
 
     println!("✅ 错误处理示例完成\n");
     Ok(())
-}
-
-/// 辅助函数：演示不同的消息创建方式
-#[allow(dead_code)]
-fn demonstrate_message_creation() {
-    // 方式1: 使用便利函数
-    let _msg1 = message("user", "Hello");
-
-    // 方式2: 直接创建结构体
-    let _msg2 = Message {
-        role: "assistant".to_string(),
-        content: "Hi there!".to_string(),
-    };
-
-    // 方式3: 批量创建
-    let _messages = [
-        message("system", "You are a helpful assistant."),
-        message("user", "What's the weather like?"),
-        message(
-            "assistant",
-            "I don't have access to real-time weather data.",
-        ),
-    ];
 }

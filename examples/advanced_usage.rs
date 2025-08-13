@@ -13,9 +13,9 @@ async fn main() -> Result<()> {
     // 初始化日志
     env_logger::init();
 
-    let api_key = env::var("OPENAI_API_KEY")
+    let api_key = env::var("OPENROUTER_API_KEY")
         .or_else(|_| env::var("API_KEY"))
-        .expect("请设置 OPENAI_API_KEY 或 API_KEY 环境变量");
+        .expect("请设置 OPENROUTER_API_KEY 或 API_KEY 环境变量");
 
     println!("🚀 NanoAI 高级使用示例\n");
 
@@ -44,7 +44,7 @@ async fn concurrent_requests_example(api_key: &str) -> Result<()> {
 
     let config = Config::default()
         .with_api_key(api_key.to_string())
-        .with_model("gpt-3.5-turbo".to_string());
+        .with_model("tngtech/deepseek-r1t2-chimera:free".to_string());
 
     let client = LLMClient::new(config);
 
@@ -107,7 +107,7 @@ async fn batch_processing_example(api_key: &str) -> Result<()> {
 
     let config = Config::default()
         .with_api_key(api_key.to_string())
-        .with_model("gpt-3.5-turbo".to_string())
+        .with_model("tngtech/deepseek-r1t2-chimera:free".to_string())
         .with_temperature(0.3); // 更一致的输出
 
     let client = LLMClient::new(config);
@@ -162,7 +162,7 @@ async fn intelligent_chat_system(api_key: &str) -> Result<()> {
 
     let config = Config::default()
         .with_api_key(api_key.to_string())
-        .with_model("gpt-3.5-turbo".to_string());
+        .with_model("tngtech/deepseek-r1t2-chimera:free".to_string());
 
     let client = LLMClient::new(config);
 
@@ -276,7 +276,10 @@ async fn performance_monitoring_example(api_key: &str) -> Result<()> {
 async fn model_comparison_example(api_key: &str) -> Result<()> {
     println!("🔬 示例5: 不同模型比较");
 
-    let models = vec!["gpt-3.5-turbo", "gpt-4o-mini"];
+    let models = vec![
+        "tngtech/deepseek-r1t2-chimera:free",
+        "meta-llama/llama-3.2-3b-instruct:free",
+    ];
     let test_prompt = "请用创意的方式解释什么是递归。";
 
     println!("🔄 使用不同模型生成回答...");
@@ -306,23 +309,4 @@ async fn model_comparison_example(api_key: &str) -> Result<()> {
 
     println!("\n✅ 模型比较示例完成\n");
     Ok(())
-}
-
-/// 辅助函数：创建测试配置
-#[allow(dead_code)]
-fn create_test_config(api_key: &str, model: &str) -> Config {
-    Config::default()
-        .with_api_key(api_key.to_string())
-        .with_model(model.to_string())
-        .with_temperature(0.7)
-}
-
-/// 辅助函数：格式化响应时间
-#[allow(dead_code)]
-fn format_duration(duration: Duration) -> String {
-    if duration.as_secs() > 0 {
-        format!("{:.2}s", duration.as_secs_f64())
-    } else {
-        format!("{}ms", duration.as_millis())
-    }
 }

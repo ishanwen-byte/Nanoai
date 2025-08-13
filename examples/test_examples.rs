@@ -2,7 +2,6 @@
 //! 用于验证示例代码的基本功能（不需要真实的API调用）
 
 use nanoai::{Config, LLMClient, Message, message};
-use std::time::Duration;
 
 #[tokio::main]
 async fn main() {
@@ -136,27 +135,22 @@ async fn test_error_handling() {
                 nanoai::NanoError::StreamError(_) => {
                     println!("      📋 错误类型: 流处理错误");
                 }
+                nanoai::NanoError::RateLimit(_) => {
+                    println!("      📋 错误类型: 速率限制错误");
+                }
+                nanoai::NanoError::Auth(_) => {
+                    println!("      📋 错误类型: 认证错误");
+                }
+                nanoai::NanoError::ModelNotFound(_) => {
+                    println!("      📋 错误类型: 模型未找到错误");
+                }
+                nanoai::NanoError::InvalidRequest(_) => {
+                    println!("      📋 错误类型: 无效请求错误");
+                }
+                nanoai::NanoError::Config(_) => {
+                    println!("      📋 错误类型: 配置错误");
+                }
             }
         }
     }
-}
-
-/// 辅助函数：显示配置信息
-#[allow(dead_code)]
-fn display_config_info(_config: &Config) {
-    println!("📋 配置信息:");
-    // 注意：实际的Config字段是私有的，这里只是示例
-    // 在真实场景中，你可能需要添加getter方法
-}
-
-/// 辅助函数：模拟延迟
-#[allow(dead_code)]
-async fn simulate_delay(ms: u64) {
-    tokio::time::sleep(Duration::from_millis(ms)).await;
-}
-
-/// 辅助函数：验证消息格式
-#[allow(dead_code)]
-fn validate_message(msg: &Message) -> bool {
-    !msg.role.is_empty() && !msg.content.is_empty()
 }

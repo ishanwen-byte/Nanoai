@@ -13,23 +13,21 @@ async fn main() -> Result<()> {
     env_logger::init();
 
     // 从.env文件获取API密钥和配置
-    let (api_key, base_url, model) = if let Ok(key) = dotenv::var("OPENROUTER_API_KEY") {
-        let model = dotenv::var("OPENROUTER_MODEL").unwrap_or("openai/gpt-3.5-turbo".to_string());
-        (key, Some("https://openrouter.ai/api/v1".to_string()), model)
-    } else if let Ok(key) = dotenv::var("OPENAI_API_KEY") {
-        (key, None, "gpt-3.5-turbo".to_string())
-    } else if let Ok(key) = dotenv::var("API_KEY") {
-        (key, None, "gpt-3.5-turbo".to_string())
+    let (api_key, model) = if let Ok(key) = dotenvy::var("OPENROUTER_API_KEY") {
+        let model = dotenvy::var("OPENROUTER_MODEL")
+            .unwrap_or("tngtech/deepseek-r1t2-chimera:free".to_string());
+        (key, model)
+    } else if let Ok(key) = dotenvy::var("API_KEY") {
+        (key, "tngtech/deepseek-r1t2-chimera:free".to_string())
     } else {
-        println!("❌ 错误: 未找到API密钥");
+        println!("❌ 错误: 未找到OpenRouter API密钥");
         println!("\n请通过以下方式之一设置API密钥:");
         println!("\n方式1: 创建.env文件 (推荐)");
-        println!("   OpenAI: OPENAI_API_KEY=your-openai-key");
-        println!("   OpenRouter: OPENROUTER_API_KEY=your-openrouter-key");
-        println!("              OPENROUTER_MODEL=your-model-name");
+        println!("   OPENROUTER_API_KEY=your-openrouter-key");
+        println!("   OPENROUTER_MODEL=your-model-name (可选)");
         println!("\n方式2: 设置环境变量");
-        println!("   Windows PowerShell: $env:OPENAI_API_KEY=\"your-api-key\"");
-        println!("   Windows CMD: set OPENAI_API_KEY=your-api-key");
+        println!("   Windows PowerShell: $env:OPENROUTER_API_KEY=\"your-api-key\"");
+        println!("   Windows CMD: set OPENROUTER_API_KEY=your-api-key");
         return Ok(());
     };
 
@@ -39,39 +37,31 @@ async fn main() -> Result<()> {
     println!("🌊 NanoAI 流式处理示例\n");
 
     // 示例1: 基础流式响应
-    basic_streaming_example(&api_key, &base_url, &model).await?;
+    basic_streaming_example(&api_key, &model).await?;
 
     // 示例2: 实时打字效果
-    typewriter_effect_example(&api_key, &base_url, &model).await?;
+    typewriter_effect_example(&api_key, &model).await?;
 
     // 示例3: 流式对话
-    streaming_conversation_example(&api_key, &base_url, &model).await?;
+    streaming_conversation_example(&api_key, &model).await?;
 
     // 示例4: 流式内容处理
-    stream_processing_example(&api_key, &base_url, &model).await?;
+    stream_processing_example(&api_key, &model).await?;
 
     // 示例5: 流式错误处理
-    streaming_error_handling(&api_key, &base_url, &model).await?;
+    streaming_error_handling(&api_key, &model).await?;
 
     println!("\n✅ 所有流式处理示例执行完成！");
     Ok(())
 }
 
 /// 示例1: 基础流式响应
-async fn basic_streaming_example(
-    api_key: &str,
-    base_url: &Option<String>,
-    model: &str,
-) -> Result<()> {
+async fn basic_streaming_example(api_key: &str, model: &str) -> Result<()> {
     println!("🌊 示例1: 基础流式响应");
 
-    let mut config = Config::default()
+    let config = Config::default()
         .with_api_key(api_key.to_string())
         .with_model(model.to_string());
-
-    if let Some(url) = base_url {
-        config = config.with_base_url(url.clone());
-    }
 
     let client = LLMClient::new(config);
 
@@ -113,21 +103,13 @@ async fn basic_streaming_example(
 }
 
 /// 示例2: 实时打字效果
-async fn typewriter_effect_example(
-    api_key: &str,
-    base_url: &Option<String>,
-    model: &str,
-) -> Result<()> {
+async fn typewriter_effect_example(api_key: &str, model: &str) -> Result<()> {
     println!("⌨️ 示例2: 实时打字效果");
 
-    let mut config = Config::default()
+    let config = Config::default()
         .with_api_key(api_key.to_string())
         .with_model(model.to_string())
         .with_temperature(0.8);
-
-    if let Some(url) = base_url {
-        config = config.with_base_url(url.clone());
-    }
 
     let client = LLMClient::new(config);
 
@@ -171,20 +153,12 @@ async fn typewriter_effect_example(
 }
 
 /// 示例3: 流式对话
-async fn streaming_conversation_example(
-    api_key: &str,
-    base_url: &Option<String>,
-    model: &str,
-) -> Result<()> {
+async fn streaming_conversation_example(api_key: &str, model: &str) -> Result<()> {
     println!("💬 示例3: 流式对话");
 
-    let mut config = Config::default()
+    let config = Config::default()
         .with_api_key(api_key.to_string())
         .with_model(model.to_string());
-
-    if let Some(url) = base_url {
-        config = config.with_base_url(url.clone());
-    }
 
     let client = LLMClient::new(config);
 
@@ -241,20 +215,12 @@ async fn streaming_conversation_example(
 }
 
 /// 示例4: 流式内容处理
-async fn stream_processing_example(
-    api_key: &str,
-    base_url: &Option<String>,
-    model: &str,
-) -> Result<()> {
+async fn stream_processing_example(api_key: &str, model: &str) -> Result<()> {
     println!("🔄 示例4: 流式内容处理");
 
-    let mut config = Config::default()
+    let config = Config::default()
         .with_api_key(api_key.to_string())
         .with_model(model.to_string());
-
-    if let Some(url) = base_url {
-        config = config.with_base_url(url.clone());
-    }
 
     let client = LLMClient::new(config);
 
@@ -328,22 +294,14 @@ async fn stream_processing_example(
 }
 
 /// 示例5: 流式错误处理
-async fn streaming_error_handling(
-    api_key: &str,
-    base_url: &Option<String>,
-    model: &str,
-) -> Result<()> {
+async fn streaming_error_handling(api_key: &str, model: &str) -> Result<()> {
     println!("🛡️ 示例5: 流式错误处理");
 
     // 首先演示正常的流式处理
     println!("🔄 正常流式处理:");
-    let mut config = Config::default()
+    let config = Config::default()
         .with_api_key(api_key.to_string())
         .with_model(model.to_string());
-
-    if let Some(url) = base_url {
-        config = config.with_base_url(url.clone());
-    }
 
     let client = LLMClient::new(config);
 
@@ -414,32 +372,4 @@ async fn streaming_error_handling(
 
     println!("✅ 流式错误处理示例完成\n");
     Ok(())
-}
-
-/// 辅助函数：格式化流式统计信息
-#[allow(dead_code)]
-fn format_streaming_stats(chunks: usize, total_chars: usize, duration: Duration) -> String {
-    let chars_per_sec = if duration.as_secs_f64() > 0.0 {
-        total_chars as f64 / duration.as_secs_f64()
-    } else {
-        0.0
-    };
-
-    format!(
-        "数据块: {chunks}, 字符: {total_chars}, 耗时: {duration:?}, 速度: {chars_per_sec:.1} 字符/秒"
-    )
-}
-
-/// 辅助函数：检测内容类型
-#[allow(dead_code)]
-fn detect_content_type(text: &str) -> &'static str {
-    if text.contains("```") {
-        "代码"
-    } else if text.contains("1.") || text.contains("2.") {
-        "列表"
-    } else if text.contains("？") {
-        "问题"
-    } else {
-        "普通文本"
-    }
 }

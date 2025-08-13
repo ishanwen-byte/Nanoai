@@ -8,24 +8,21 @@ async fn main() -> Result<()> {
     println!("🚀 NanoAI 快速入门\n");
 
     // 步骤1: 从.env文件获取API密钥和配置
-    dotenv::dotenv().ok();
+    dotenvy::dotenv().ok();
 
-    let (api_key, base_url, model) = if let (Ok(key), Ok(model)) = (
-        dotenv::var("OPENROUTER_API_KEY"),
-        dotenv::var("OPENROUTER_MODEL"),
-    ) {
+    let (api_key, model) = if let Ok(key) = dotenvy::var("OPENROUTER_API_KEY") {
+        let model = dotenvy::var("OPENROUTER_MODEL")
+            .unwrap_or("tngtech/deepseek-r1t2-chimera:free".to_string());
         println!("🌐 使用 OpenRouter 配置");
-        (key, Some("https://openrouter.ai/api/v1".to_string()), model)
-    } else if let Ok(key) = dotenv::var("OPENAI_API_KEY").or_else(|_| dotenv::var("API_KEY")) {
-        println!("🤖 使用 OpenAI 配置");
-        (key, None, "gpt-3.5-turbo".to_string())
+        (key, model)
+    } else if let Ok(key) = dotenvy::var("API_KEY") {
+        println!("🌐 使用 OpenRouter 配置 (通用API密钥)");
+        (key, "tngtech/deepseek-r1t2-chimera:free".to_string())
     } else {
-        println!("❌ 未找到API密钥！");
-        println!("请在 .env 文件中设置以下环境变量之一:");
+        println!("❌ 未找到OpenRouter API密钥！");
+        println!("请在 .env 文件中设置以下环境变量:");
         println!("   OPENROUTER_API_KEY=your_openrouter_key");
-        println!("   OPENROUTER_MODEL=your_model_name");
-        println!("或者:");
-        println!("   OPENAI_API_KEY=your_openai_key");
+        println!("   OPENROUTER_MODEL=your_model_name (可选)");
         return Ok(());
     };
 
@@ -34,12 +31,8 @@ async fn main() -> Result<()> {
 
     // 步骤2: 创建配置
     println!("🔧 创建配置...");
-    let mut config = Config::default().with_api_key(api_key).with_model(model);
-
-    if let Some(url) = base_url {
-        config = config.with_base_url(url);
-        println!("🌐 使用自定义API端点: OpenRouter");
-    }
+    let config = Config::default().with_api_key(api_key).with_model(model);
+    println!("🌐 使用OpenRouter API端点");
 
     // 步骤3: 创建客户端
     println!("🤖 创建AI客户端...");

@@ -1,6 +1,3 @@
-//! NanoAI - 轻量级AI客户端库（函数式风格）
-//! 实现OpenAI兼容的LLM接口
-
 use futures::{Stream, StreamExt};
 use log::{debug, error, info, warn};
 use nanorand::{Rng, WyRand};
@@ -10,34 +7,67 @@ use reqwest::{
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::time::Duration;
+
+use std::time::{Duration, Instant};
 use thiserror::Error;
 use tokio::time::sleep;
-
-// 错误处理 - 函数式风格的错误类型
 #[derive(Debug, Error)]
 pub enum NanoError {
-    #[error("HTTP request failed: {0}")]
+    #[error("HTTP请求失败: {0}")]
     Http(#[from] reqwest::Error),
-    #[error("JSON error: {0}")]
+
+    #[error("JSON处理错误: {0}")]
     Json(#[from] serde_json::Error),
-    #[error("API error: {0}")]
+
+    #[error("API错误: {0}")]
     Api(String),
-    #[error("Request timed out")]
+
+    #[error("请求超时")]
     Timeout,
-    #[error("No content in response")]
+
+    #[error("响应内容为空")]
     NoContent,
-    #[error("Stream error: {0}")]
+
+    #[error("流处理错误: {0}")]
     StreamError(String),
+
+    #[error("请求频率超限: {0}")]
+    RateLimit(String),
+
+    #[error("身份验证失败: {0}")]
+    Auth(String),
+
+    #[error("模型不存在: {0}")]
+    ModelNotFound(String),
+
+    #[error("请求参数无效: {0}")]
+    InvalidRequest(String),
+
+    #[error("配置错误: {0}")]
+    Config(String),
 }
 
 pub type Result<T> = std::result::Result<T, NanoError>;
-
-// 不可变数据类型
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Hash, PartialEq, Eq)]
 pub struct Message {
     pub role: String,
     pub content: String,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct RequestStats {
+    pub duration_ms: u64,
+    pub prompt_tokens: Option<u32>,
+    pub completion_tokens: Option<u32>,
+    pub total_tokens: Option<u32>,
+    pub model: String,
+    pub timestamp: Option<std::time::SystemTime>,
+}
+
+#[derive(Debug)]
+pub struct ResponseWithStats {
+    pub content: String,
+    pub stats: RequestStats,
 }
 
 #[derive(Debug, Clone)]
@@ -59,13 +89,13 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             model: "tngtech/deepseek-r1t2-chimera:free".into(),
-            system_message: "You are a helpful assistant.".into(),
+            system_message: "You are a helpful AI assistant.".into(),
             temperature: 0.7,
             top_p: 1.0,
-            max_tokens: 1024,
+            max_tokens: 4096,
             timeout: Duration::from_secs(60),
             retries: 3,
-            retry_delay: Duration::from_secs(2),
+            retry_delay: Duration::from_millis(1000),
             api_base: "https://api.openrouter.com/v1".into(),
             api_key: "".into(),
             random_seed: None,
@@ -74,7 +104,36 @@ impl Default for Config {
 }
 
 impl Config {
-    // 纯函数：创建新配置（不修改原有配置）
+    pub fn from_env() -> Result<Self> {
+        if std::path::Path::new(".env").exists()
+            && let Ok(content) = std::fs::read_to_string(".env")
+        {
+            for line in content.lines() {
+                if let Some((key, value)) = line.split_once('=') {
+                    let key = key.trim();
+                    let value = value.trim().trim_matches('"').trim_matches('\'');
+                    unsafe {
+                        std::env::set_var(key, value);
+                    }
+                }
+            }
+        }
+
+        let api_key = std::env::var("OPENROUTER_API_KEY")
+            .or_else(|_| std::env::var("API_KEY"))
+            .map_err(|_| {
+                NanoError::Config(
+                    "No OpenRouter API key found in environment variables".to_string(),
+                )
+            })?;
+
+        let model = std::env::var("OPENROUTER_MODEL")
+            .or_else(|_| std::env::var("MODEL"))
+            .unwrap_or_else(|_| "tngtech/deepseek-r1t2-chimera:free".to_string());
+
+        Ok(Self::default().with_api_key(api_key).with_model(model))
+    }
+
     pub fn with_model(self, model: String) -> Self {
         Self { model, ..self }
     }
@@ -88,10 +147,6 @@ impl Config {
             temperature,
             ..self
         }
-    }
-
-    pub fn with_base_url(self, api_base: String) -> Self {
-        Self { api_base, ..self }
     }
 
     pub fn with_random_seed(self, seed: u64) -> Self {
@@ -110,46 +165,68 @@ impl Config {
     }
 }
 
-// 响应类型
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 struct CompletionResponse {
     choices: Vec<CompletionChoice>,
+    usage: Option<Usage>,
+    model: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 struct CompletionChoice {
     message: CompletionMessage,
+    finish_reason: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 struct CompletionMessage {
     content: String,
+    role: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct Usage {
+    prompt_tokens: u32,
+    completion_tokens: u32,
+    total_tokens: u32,
 }
 
 #[derive(Debug, Deserialize)]
 struct StreamResponse {
     choices: Vec<StreamChoice>,
+    #[allow(dead_code)]
+    model: Option<String>,
+    #[allow(dead_code)]
+    usage: Option<Usage>,
 }
 
 #[derive(Debug, Deserialize)]
 struct StreamChoice {
     delta: StreamDelta,
+    #[allow(dead_code)]
+    finish_reason: Option<String>,
+    #[allow(dead_code)]
+    index: Option<u32>,
 }
 
 #[derive(Debug, Deserialize)]
 struct StreamDelta {
     content: Option<String>,
+    #[allow(dead_code)]
+    role: Option<String>,
 }
 
-// 函数式客户端
 #[derive(Debug, Clone)]
 pub struct LLMClient {
+    client: ReqwestClient,
     config: Config,
-    http_client: ReqwestClient,
+    headers: HeaderMap,
 }
 
 impl LLMClient {
-    // 纯函数：创建新客户端
     pub fn new(config: Config) -> Self {
         static INITIALIZED: std::sync::OnceLock<std::sync::Mutex<Vec<String>>> =
             std::sync::OnceLock::new();
@@ -162,199 +239,107 @@ impl LLMClient {
             models.push(config.model.clone());
         }
 
+        let headers = build_headers(&config.api_key);
+
         Self {
-            config,
-            http_client: ReqwestClient::builder()
+            client: ReqwestClient::builder()
                 .danger_accept_invalid_certs(false)
                 .use_rustls_tls()
-                .timeout(Duration::from_secs(60))
+                .timeout(config.timeout)
                 .connect_timeout(Duration::from_secs(10))
                 .build()
                 .unwrap_or_else(|_| ReqwestClient::new()),
+            config,
+            headers,
         }
     }
 
-    // 生成文本 - 纯函数风格
     pub async fn generate(&self, prompt: &str) -> Result<String> {
-        self.generate_with_context(
+        let response = self.generate_with_stats(prompt).await?;
+        Ok(response.content)
+    }
+
+    pub async fn generate_with_stats(&self, prompt: &str) -> Result<ResponseWithStats> {
+        self.generate_with_context_stats(
             &self.config.system_message,
             &[Message {
-                role: "user".into(),
-                content: prompt.into(),
+                role: "user".to_string(),
+                content: prompt.to_string(),
             }],
         )
         .await
     }
 
-    // 带上下文生成 - 函数式组合
+    pub async fn generate_with_context_stats(
+        &self,
+        system_msg: &str,
+        messages: &[Message],
+    ) -> Result<ResponseWithStats> {
+        let start_time = Instant::now();
+        let msgs = prepare_messages(system_msg, messages)?;
+        let params = build_params(&self.config, msgs);
+        let response = self.call_api_with_stats(params).await?;
+        let duration = start_time.elapsed();
+
+        Ok(ResponseWithStats {
+            content: response.content,
+            stats: RequestStats {
+                duration_ms: duration.as_millis() as u64,
+                prompt_tokens: response.stats.prompt_tokens,
+                completion_tokens: response.stats.completion_tokens,
+                total_tokens: response.stats.total_tokens,
+                model: self.config.model.clone(),
+                timestamp: Some(std::time::SystemTime::now()),
+            },
+        })
+    }
+
     pub async fn generate_with_context(
         &self,
         system_msg: &str,
         messages: &[Message],
     ) -> Result<String> {
-        // 函数组合：准备消息 -> 构建参数 -> 带重试调用API
         let msgs = prepare_messages(system_msg, messages)?;
-        let params = build_params(&self.config, &msgs, false)?;
+        let params = build_params(&self.config, msgs);
         self.call_with_retry(&params).await
     }
 
-    // 流式生成 - 函数式流处理
     pub async fn generate_stream(
         &self,
         prompt: &str,
     ) -> Result<impl Stream<Item = Result<String>> + '_> {
-        let system_msg = self.config.system_message.clone();
-        let messages = vec![
-            Message {
-                role: "system".into(),
-                content: system_msg,
-            },
-            Message {
-                role: "user".into(),
-                content: prompt.into(),
-            },
-        ];
-
-        let params = build_params(&self.config, &messages, true)?;
-        let endpoint = format!("{}/chat/completions", self.config.api_base);
-        let headers = build_headers(&self.config.api_key);
-
-        let response = self
-            .http_client
-            .post(&endpoint)
-            .headers(headers)
-            .json(&params)
-            .timeout(self.config.timeout)
-            .send()
-            .await
-            .map_err(|e| {
-                if e.is_timeout() {
-                    NanoError::Timeout
-                } else {
-                    e.into()
-                }
-            })?;
-
-        if !response.status().is_success() {
-            return Err(NanoError::Api(format!(
-                "HTTP {}: {}",
-                response.status(),
-                response.text().await?
-            )));
-        }
-
-        // 函数式流处理管道
-        use futures::future;
-        Ok(response
-            .bytes_stream()
-            .map(|chunk_result| {
-                match chunk_result {
-                    Ok(chunk) => match std::str::from_utf8(&chunk) {
-                        Ok(text) => {
-                            // 简化处理：直接返回文本块
-                            if text.contains("data: ") {
-                                let lines: Vec<&str> = text.lines().collect();
-                                for line in lines {
-                                    if line.starts_with("data: ")
-                                        && !line.contains("[DONE]")
-                                        && let Ok(json_str) =
-                                            line.strip_prefix("data: ").ok_or("No data prefix")
-                                        && let Ok(stream_data) =
-                                            serde_json::from_str::<StreamResponse>(json_str)
-                                        && let Some(content) = stream_data
-                                            .choices
-                                            .into_iter()
-                                            .next()
-                                            .and_then(|c| c.delta.content)
-                                    {
-                                        return Ok(content);
-                                    }
-                                }
-                            }
-                            Ok(String::new())
-                        }
-                        Err(e) => Err(NanoError::StreamError(format!("Invalid UTF-8: {e}"))),
-                    },
-                    Err(e) => Err(NanoError::StreamError(e.to_string())),
-                }
-            })
-            .filter(|result| {
-                future::ready(match result {
-                    Ok(s) => !s.is_empty(),
-                    Err(_) => true,
-                })
-            }))
+        let user_msg = message("user", prompt);
+        let messages = prepare_messages(&self.config.system_message, &[user_msg])?;
+        self.create_stream(messages).await
     }
 
-    // 带上下文流式生成
     pub async fn generate_stream_with_context(
         &self,
         system_msg: &str,
         messages: &[Message],
     ) -> Result<impl Stream<Item = Result<String>> + '_> {
-        let msgs = prepare_messages(system_msg, messages)?;
-        let params = build_params(&self.config, &msgs, true)?;
-        let endpoint = format!("{}/chat/completions", self.config.api_base);
-        let headers = build_headers(&self.config.api_key);
+        let all_messages = prepare_messages(system_msg, messages)?;
+        self.create_stream(all_messages).await
+    }
 
-        let response = self
-            .http_client
-            .post(&endpoint)
-            .headers(headers)
-            .json(&params)
-            .timeout(self.config.timeout)
-            .send()
-            .await
-            .map_err(|e| {
-                if e.is_timeout() {
-                    NanoError::Timeout
-                } else {
-                    e.into()
-                }
-            })?;
+    async fn create_stream(
+        &self,
+        messages: Vec<Message>,
+    ) -> Result<impl Stream<Item = Result<String>> + '_> {
+        let params = build_params_stream(&self.config, &messages)?;
+        let response = self.send_request(&params).await?;
 
-        if !response.status().is_success() {
-            return Err(NanoError::Api(format!(
-                "HTTP {}: {}",
-                response.status(),
-                response.text().await?
-            )));
-        }
+        let response = check_response_status(response).await?;
 
-        // 函数式流处理管道
         use futures::future;
         Ok(response
             .bytes_stream()
-            .map(|chunk_result| {
-                match chunk_result {
-                    Ok(chunk) => match std::str::from_utf8(&chunk) {
-                        Ok(text) => {
-                            // 简化处理：直接返回文本块
-                            if text.contains("data: ") {
-                                let lines: Vec<&str> = text.lines().collect();
-                                for line in lines {
-                                    if line.starts_with("data: ")
-                                        && !line.contains("[DONE]")
-                                        && let Ok(json_str) =
-                                            line.strip_prefix("data: ").ok_or("No data prefix")
-                                        && let Ok(stream_data) =
-                                            serde_json::from_str::<StreamResponse>(json_str)
-                                        && let Some(content) = stream_data
-                                            .choices
-                                            .into_iter()
-                                            .next()
-                                            .and_then(|c| c.delta.content)
-                                    {
-                                        return Ok(content);
-                                    }
-                                }
-                            }
-                            Ok(String::new())
-                        }
-                        Err(e) => Err(NanoError::StreamError(format!("Invalid UTF-8: {e}"))),
-                    },
-                    Err(e) => Err(NanoError::StreamError(e.to_string())),
-                }
+            .map(|chunk_result| match chunk_result {
+                Ok(chunk) => match std::str::from_utf8(&chunk) {
+                    Ok(text) => process_stream_chunk(text),
+                    Err(e) => Err(NanoError::StreamError(format!("Invalid UTF-8: {e}"))),
+                },
+                Err(e) => Err(NanoError::StreamError(e.to_string())),
             })
             .filter(|result| {
                 future::ready(match result {
@@ -364,7 +349,6 @@ impl LLMClient {
             }))
     }
 
-    // 带重试的API调用 - 函数式递归实现
     async fn call_with_retry(&self, params: &Value) -> Result<String> {
         let mut retries_left = self.config.retries;
         loop {
@@ -372,11 +356,14 @@ impl LLMClient {
                 Ok(result) => return Ok(result),
                 Err(e) => {
                     if retries_left > 0 {
-                        warn!("Request failed: {e}. Retrying...");
+                        warn!(
+                            "Request failed: {e}. Retrying in {:?}...",
+                            self.config.retry_delay
+                        );
                         sleep(self.config.retry_delay).await;
                         retries_left -= 1;
                     } else {
-                        error!("All retries exhausted: {e}");
+                        error!("All {} retries exhausted: {e}", self.config.retries);
                         return Err(e);
                     }
                 }
@@ -384,17 +371,12 @@ impl LLMClient {
         }
     }
 
-    // 实际API调用
-    async fn call_api(&self, params: &Value) -> Result<String> {
-        debug!("API parameters: {params:?}");
-
+    async fn send_request(&self, params: &Value) -> Result<reqwest::Response> {
         let endpoint = format!("{}/chat/completions", self.config.api_base);
-        let headers = build_headers(&self.config.api_key);
 
-        let response = self
-            .http_client
+        self.client
             .post(&endpoint)
-            .headers(headers)
+            .headers(self.headers.clone())
             .json(params)
             .timeout(self.config.timeout)
             .send()
@@ -405,13 +387,21 @@ impl LLMClient {
                 } else {
                     e.into()
                 }
-            })?;
+            })
+    }
 
+    async fn call_api(&self, params: &Value) -> Result<String> {
+        debug!("API parameters: {params:?}");
+        let response = self.send_request(params).await?;
         handle_response(response).await
+    }
+
+    async fn call_api_with_stats(&self, params: Value) -> Result<ResponseWithStats> {
+        let response = self.send_request(&params).await?;
+        handle_response_with_stats(response).await
     }
 }
 
-// 纯函数：准备消息列表
 fn prepare_messages(system_msg: &str, messages: &[Message]) -> Result<Vec<Message>> {
     let mut result = vec![Message {
         role: "system".into(),
@@ -421,54 +411,69 @@ fn prepare_messages(system_msg: &str, messages: &[Message]) -> Result<Vec<Messag
     Ok(result)
 }
 
-// 纯函数：构建请求参数
-fn build_params(config: &Config, messages: &[Message], stream: bool) -> Result<Value> {
+fn build_params_unified<T>(config: &Config, messages: T, stream: bool) -> Value
+where
+    T: Into<Vec<Message>>,
+{
     let mut params = serde_json::json!({
         "model": config.model,
-        "messages": messages,
+        "messages": messages.into(),
         "stream": stream,
+        "temperature": config.temperature,
+        "top_p": config.top_p,
+        "max_tokens": config.max_tokens,
     });
 
-    // 根据模型调整参数
-    if config.api_base == "https://api.openrouter.com/v1" && config.model.starts_with('o') {
-        params["max_completion_tokens"] = config.max_tokens.into();
-    } else {
-        params["temperature"] = config.temperature.into();
-        params["top_p"] = config.top_p.into();
-        params["max_tokens"] = config.max_tokens.into();
-    }
-
-    // 添加随机种子（使用nanorand）
     if let Some(seed) = config.random_seed {
         params["seed"] = seed.into();
     }
 
-    Ok(params)
+    params
 }
 
-// 纯函数：构建请求头
+fn build_params(config: &Config, messages: Vec<Message>) -> Value {
+    build_params_unified(config, messages, false)
+}
+
+fn build_params_stream(config: &Config, messages: &[Message]) -> Result<Value> {
+    Ok(build_params_unified(config, messages.to_vec(), true))
+}
+
 fn build_headers(api_key: &str) -> HeaderMap {
     let mut headers = HeaderMap::new();
+
+    // 添加Bearer认证头，符合OAuth 2.0规范
     headers.insert(
         HeaderName::from_static("authorization"),
         HeaderValue::from_str(&format!("Bearer {api_key}")).unwrap(),
     );
+
+    // 指定请求体内容类型为JSON
     headers.insert(
         HeaderName::from_static("content-type"),
         HeaderValue::from_static("application/json"),
     );
+
     headers
 }
 
-// 纯函数：处理API响应
-async fn handle_response(response: reqwest::Response) -> Result<String> {
-    if !response.status().is_success() {
-        return Err(NanoError::Api(format!(
-            "HTTP {}: {}",
-            response.status(),
-            response.text().await?
-        )));
+async fn check_response_status(response: reqwest::Response) -> Result<reqwest::Response> {
+    let status = response.status();
+    if !status.is_success() {
+        let error_text = response.text().await?;
+        return Err(match status.as_u16() {
+            401 => NanoError::Auth(error_text),
+            404 => NanoError::ModelNotFound(error_text),
+            429 => NanoError::RateLimit(error_text),
+            400 => NanoError::InvalidRequest(error_text),
+            _ => NanoError::Api(format!("HTTP {}: {}", status, error_text)),
+        });
     }
+    Ok(response)
+}
+
+async fn handle_response(response: reqwest::Response) -> Result<String> {
+    let response = check_response_status(response).await?;
 
     let completion: CompletionResponse = response.json().await?;
     completion
@@ -479,11 +484,58 @@ async fn handle_response(response: reqwest::Response) -> Result<String> {
         .ok_or(NanoError::NoContent)
 }
 
-// 工具函数：创建消息
+async fn handle_response_with_stats(response: reqwest::Response) -> Result<ResponseWithStats> {
+    let response = check_response_status(response).await?;
+
+    let completion: CompletionResponse = response.json().await?;
+    let content = completion
+        .choices
+        .into_iter()
+        .next()
+        .map(|c| c.message.content)
+        .ok_or(NanoError::NoContent)?;
+
+    let stats = RequestStats {
+        duration_ms: 0, // 由调用方根据实际请求耗时设置
+        prompt_tokens: completion.usage.as_ref().map(|u| u.prompt_tokens),
+        completion_tokens: completion.usage.as_ref().map(|u| u.completion_tokens),
+        total_tokens: completion.usage.as_ref().map(|u| u.total_tokens),
+        model: String::new(), // 由调用方设置实际使用的模型名称
+        timestamp: Some(std::time::SystemTime::now()),
+    };
+
+    Ok(ResponseWithStats { content, stats })
+}
+
+fn process_stream_chunk(text: &str) -> Result<String> {
+    // 检查是否包含SSE数据标记
+    if text.contains("data: ") {
+        // 逐行处理SSE数据
+        for line in text.lines() {
+            // 查找有效的数据行：以"data: "开头且不是结束标记
+            if line.starts_with("data: ")
+                && !line.contains("[DONE]")  // 跳过流结束标记
+                && let Ok(json_str) = line.strip_prefix("data: ").ok_or("No data prefix")
+                && let Ok(stream_data) = serde_json::from_str::<StreamResponse>(json_str)
+                && let Some(content) = stream_data
+                    .choices
+                    .into_iter()
+                    .next()  // 获取第一个选择项
+                    .and_then(|c| c.delta.content)
+            // 提取增量内容
+            {
+                return Ok(content);
+            }
+        }
+    }
+    // 如果没有找到有效内容，返回空字符串
+    Ok(String::new())
+}
+
 pub fn message(role: &str, content: &str) -> Message {
     Message {
-        role: role.into(),
-        content: content.into(),
+        role: role.to_string(),
+        content: content.to_string(),
     }
 }
 
@@ -496,7 +548,7 @@ mod tests {
         let config = Config::default();
         assert_eq!(config.model, "tngtech/deepseek-r1t2-chimera:free");
         assert_eq!(config.temperature, 0.7);
-        assert_eq!(config.max_tokens, 1024);
+        assert_eq!(config.max_tokens, 4096);
         assert_eq!(config.random_seed, None);
     }
 
@@ -519,7 +571,6 @@ mod tests {
         let config2 = Config::default().with_random_seed_auto();
         assert!(config1.random_seed.is_some());
         assert!(config2.random_seed.is_some());
-        // 随机种子应该不同（概率极高）
         assert_ne!(config1.random_seed, config2.random_seed);
     }
 
@@ -545,10 +596,10 @@ mod tests {
     fn test_build_params_without_seed() {
         let config = Config::default();
         let messages = vec![message("user", "test")];
-        let params = build_params(&config, &messages, false).unwrap();
+        let params = build_params(&config, messages);
         assert_eq!(params["model"], "tngtech/deepseek-r1t2-chimera:free");
         assert_eq!(params["stream"], false);
-        // 使用近似比较浮点数
+        assert_eq!(params["max_tokens"], 4096);
         let temp = params["temperature"].as_f64().unwrap();
         assert!((temp - 0.7).abs() < 0.001);
         assert!(params.get("seed").is_none());
@@ -558,19 +609,19 @@ mod tests {
     fn test_build_params_with_seed() {
         let config = Config::default().with_random_seed(42);
         let messages = vec![message("user", "test")];
-        let params = build_params(&config, &messages, false).unwrap();
+        let params = build_params(&config, messages);
         assert_eq!(params["seed"], 42);
     }
 
     #[test]
     fn test_build_params_openrouter() {
-        let config = Config::default()
-            .with_base_url("https://api.openrouter.com/v1".to_string())
-            .with_model("openai/gpt-4".to_string());
+        let config = Config::default().with_model("openai/gpt-4".to_string());
         let messages = vec![message("user", "test")];
-        let params = build_params(&config, &messages, false).unwrap();
-        assert_eq!(params["max_completion_tokens"], 1024);
-        assert!(params.get("max_tokens").is_none());
+        let params = build_params(&config, messages);
+        assert_eq!(params["model"], "openai/gpt-4");
+        assert_eq!(params["max_tokens"], 4096);
+        assert!((params["temperature"].as_f64().unwrap() - 0.7).abs() < 0.001);
+        assert_eq!(params["top_p"], 1.0);
     }
 
     #[test]
