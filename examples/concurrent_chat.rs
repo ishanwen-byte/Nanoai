@@ -3,7 +3,7 @@
 //! 这个示例展示如何同时发起多个聊天请求，并异步处理响应。
 //! 适用于需要批量处理多个问题或对话的场景。
 
-use nanoai::{Config, LLMClient, message};
+use nanoai::{Config, LLMClient};
 use tokio;
 use futures::future::join_all;
 use std::time::Instant;
@@ -29,12 +29,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
 
     println!("✅ API密钥已设置");
-    println!("🔧 使用模型: {}", model);
-
+    // println!("🔧 使用模型: {}", model);
+    
     // 步骤2: 创建配置和客户端
     let config = Config::default()
-        .with_model(model)
         .with_api_key(api_key)
+        .with_model(model)
+        .with_max_tokens(32000)
         .with_temperature(0.7)
         .with_random_seed_auto(); // 每个请求使用不同的随机种子
 
@@ -103,7 +104,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     for (task_index, task_result) in results.into_iter().enumerate() {
         match task_result {
-            Ok(Ok((index, label, content, stats))) => {
+            Ok(Ok((_index, label, content, stats))) => {
                 successful_requests += 1;
                 total_input_tokens += stats.prompt_tokens.unwrap_or(0);
                 total_output_tokens += stats.completion_tokens.unwrap_or(0);
@@ -117,7 +118,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 };
                 println!("   {}", summary.replace('\n', " "));
             }
-            Ok(Err((index, label, error))) => {
+            Ok(Err((_index, label, error))) => {
                 failed_requests += 1;
                 println!("❌ [{}] 失败: {}", label, error);
             }

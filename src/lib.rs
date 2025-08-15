@@ -143,9 +143,12 @@ impl Config {
     }
 
     // 使用宏生成builder方法
+    config_builder!(api_base, String);
     config_builder!(model, String);
     config_builder!(api_key, String);
     config_builder!(temperature, f32);
+    config_builder!(top_p, f32);
+    config_builder!(max_tokens, u32);
     config_builder!(random_seed, u64, Some);
 
     pub fn with_random_seed_auto(self) -> Self {

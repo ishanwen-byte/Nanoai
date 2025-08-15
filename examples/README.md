@@ -28,6 +28,15 @@
 - 🔄 流式内容处理和统计
 - 🛡️ 流式错误处理
 
+### 4. 并发聊天示例 (`concurrent_chat.rs`)
+展示高性能并发处理能力：
+- ⚡ 并发处理多个 AI 请求
+- 📊 实时统计和性能监控
+- 🛡️ 安全的错误处理和恢复
+- 🎯 智能字符串截取和摘要生成
+- 📈 详细的 Token 使用统计
+- 🔄 函数式编程风格的异步处理
+
 ## 🚀 运行示例
 
 ### 前置条件
@@ -49,7 +58,7 @@
    cargo build
    ```
 
-### 运行示例
+### 运行特定示例
 
 ```bash
 # 基础使用示例
@@ -60,6 +69,9 @@ cargo run --example advanced_usage
 
 # 流式处理示例
 cargo run --example streaming_example
+
+# 并发聊天示例
+cargo run --example concurrent_chat
 ```
 
 ### 启用日志输出

@@ -60,10 +60,16 @@ let messages = vec![
 ];
 
 // 带上下文生成回复
-let response = client.generate_with_context(
+let response = client.generate_with_context_stats(
     "你是一个编程助手",
     &messages
 ).await?;
+
+println!("AI回复: {}", response.content);
+println!("统计信息: 用时 {}ms, 输入 {} tokens, 输出 {} tokens", 
+         response.stats.duration_ms,
+         response.stats.prompt_tokens.unwrap_or(0),
+         response.stats.completion_tokens.unwrap_or(0));
 ```
 
 ### 流式响应
@@ -89,6 +95,51 @@ while let Some(result) = stream.next().await {
     }
 }
 println!(); // 换行
+```
+
+### 并发处理
+
+```rust
+use futures::future::join_all;
+use tokio;
+
+// 准备多个问题
+let questions = vec![
+    "请用一句话解释什么是人工智能？",
+    "请推荐三本编程入门书籍。",
+    "请解释什么是函数式编程？",
+];
+
+// 并发处理所有问题
+let tasks: Vec<_> = questions.into_iter().enumerate().map(|(i, question)| {
+    let client = client.clone();
+    tokio::spawn(async move {
+        let result = client.generate_with_stats(question).await;
+        (i, question, result)
+    })
+}).collect();
+
+// 等待所有任务完成
+let results = join_all(tasks).await;
+
+// 处理结果
+for task_result in results {
+    match task_result {
+        Ok((index, question, Ok(response))) => {
+            println!("问题 {}: {}", index + 1, question);
+            println!("回答: {}", response.content);
+            println!("统计: {}ms, {} tokens\n", 
+                     response.stats.duration_ms,
+                     response.stats.total_tokens.unwrap_or(0));
+        }
+        Ok((index, question, Err(e))) => {
+            println!("问题 {} 失败: {}", index + 1, e);
+        }
+        Err(e) => {
+            println!("任务执行失败: {}", e);
+        }
+    }
+}
 ```
 
 ## 配置选项
@@ -170,7 +221,16 @@ cargo run --example streaming_example
 
 # 运行高级示例
 cargo run --example advanced_usage
+
+# 并发聊天（推荐）
+cargo run --example concurrent_chat
 ```
+
+## 📖 详细文档
+
+- [API 调用详细示例](docs/api_examples.md) - 包含所有 API 方法的详细使用说明
+- [库注释文档](docs/lib_comments.md) - 代码级别的详细注释说明
+- [示例程序说明](examples/README.md) - 各种使用场景的示例程序
 
 ## 测试
 
