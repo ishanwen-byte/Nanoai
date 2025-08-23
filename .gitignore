@@ -4,6 +4,7 @@
 .env
 .env.local
 .env.*.local
+*.json
 
 # IDE和编辑器文件
 .vscode/

@@ -2,7 +2,7 @@
 name = "nanoai"
 version = "0.1.0"
 authors = ["ishanwen <ishanwen@github.com>"]
-edition = "2024"
+edition = "2021"
 description = "A simple nano AI client Power by Rust"
 license = "MIT"
 repository = "https://github.com/ishanwen-byte/Nanoai"
@@ -10,20 +10,21 @@ keywords = ["ai", "nano", "rust"]
 categories = ["ai"]
 
 [dependencies]
-reqwest = { version = "0.12", features = ["json", "stream"] }
+async-stream = "0.3"
+reqwest = { version = "0.12", features = ["json", "stream", "native-tls-vendored"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-thiserror = "2.0.14"
+thiserror = "1.0"
 tokio = { version = "1.0", features = ["full"] }
 futures = "0.3"
-log = "0.4.27"
-nanorand = { version = "0.8.0", default-features = false, features = ["wyrand", "std", "entropy"] }
+log = "0.4"
+backoff = "0.4.0"
+bytes = "1.6.0"
+fastrand = "2.1.0"
+dotenv = "0.15.0"
+tempfile = "3.10.1"
+lazy_static = "1.4.0"
 paste = "1.0"
-
-[dev-dependencies]
-tokio = { version = "1.47.1", features = ["macros", "rt-multi-thread"] }
-env_logger = "0.11.8"
-dotenvy = "0.15.7"
 
 # Clippy 配置
 [lints.clippy]
@@ -36,9 +37,4 @@ opt-level = "s"       # 优化代码尺寸，兼顾速度
 lto = "fat"           # 启用最大程度的链接时优化
 codegen-units = 1     # 降低代码生成单元数，增加优化时间但提升性能
 panic = "abort"       # 使用 'abort' 而不是 'unwind' 来处理 panic
-strip = "none"     # 移除符号信息，保留必要的调试信息
-
-# 旧示例已删除，使用新的函数式编程示例
-# [[example]]
-# name = "chas"
-# path = "example/chas.rs"
+strip = "symbols"     # 移除符号信息
